@@ -1,0 +1,21 @@
+# --- settings.toml template ---
+# Copy this file to "settings.toml" on your CIRCUITPY drive and fill in your
+# own values. The real settings.toml is git-ignored so your credentials and
+# keys are never committed or shared.
+
+# --- WiFi (required) ---
+CIRCUITPY_WIFI_SSID = "your-network-name"
+CIRCUITPY_WIFI_PASSWORD = "your-network-password"
+
+# --- NTP time source (optional) ---
+# Leave commented to use the default public pool ("pool.ntp.org").
+# Uncomment and set this to point the clock at your own NTP server.
+# Wiring it into code.py is a one-liner:
+#     ntp = adafruit_ntp.NTP(pool, server=getenv("NTP_SERVER") or "pool.ntp.org",
+#                            tz_offset=0, cache_seconds=3600)
+# NTP_SERVER = "192.168.1.10"
+
+# --- CircuitPython Web Workflow (optional) ---
+# Lets you edit files / view the serial console over WiFi from a browser.
+# CIRCUITPY_WEB_API_PORT = 80
+# CIRCUITPY_WEB_API_PASSWORD = "choose-a-password"

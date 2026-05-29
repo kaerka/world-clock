@@ -1,0 +1,28 @@
+# --- Secrets / credentials (never commit these) ---
+secrets.py
+settings.toml
+# Keep the templates tracked:
+!secrets.py.template
+!settings.toml.template
+
+# --- CircuitPython board-generated files ---
+boot_out.txt          # contains the board's MAC address and UID
+*.uf2
+
+# --- CircuitPython libraries (download from the Adafruit bundle, see README) ---
+lib/
+
+# --- Python / editor / OS cruft ---
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- CIRCUITPY drive metadata (if a board folder is copied in) ---
+.metadata_never_index
+.Trashes
+.Trash-1000
+.fseventsd/
+"System Volume Information/"
