@@ -8,7 +8,8 @@ Running notes for porting the clock to more hardware and adding features.
 | --- | --- | --- |
 | MatrixPortal S3 | 64x64 (single panel) | ✅ Working |
 | MatrixPortal M4 | 32x32 (single panel) | ✅ Working (deployed, tom-thumb font) |
-| Raspberry Pi 4 + Adafruit RGB Matrix HAT | 6 × 32x16 panels | 🔜 Hardware built, PSU borrowed (not powered yet) — **the main next build** |
+| Raspberry Pi 4 + Adafruit RGB Matrix HAT | 6 × 16x32 panels (64x48, 2w×3t) | ✅ Working — live on hardware (`rpi4-adafruit-hat/`); mapping confirmed via probe |
+| Spectra (full wall) | 18 × 64x64 (2× Pi4, Electrodragon, 3×3 each) | 🔭 Future — merge target for world-clock + sensor metrics |
 | ~~Pimoroni Interstate 75~~ | — | ❌ Dropped — original (non-W) board has no onboard WiFi |
 
 ## Highest-leverage first step: extract a shared core
@@ -48,7 +49,43 @@ Known / cosmetic:
 - This M4 is the original ~4-year-old board and is flaky (CircuitPython upgrade
   failed). Likely its last project — don't sink time into upgrading it.
 
-## Port 2 — Raspberry Pi 4 + Adafruit RGB Matrix HAT (6 × 32x16)
+## Port 2 — Raspberry Pi 4 + Adafruit RGB Matrix HAT (6 × 16x32) ✅ WORKING
+
+Live on hardware in `rpi4-adafruit-hat/` (`worldclock.py`, `panel_probe.py`,
+README, `tom-thumb.bdf` + `5x7.bdf`). On this Pi the hzeller bindings are
+already installed system-wide and the OS clock is NTP-synced.
+
+- [x] **Stack swapped:** hzeller `rpi-rgb-led-matrix` instead of `displayio`.
+- [x] **DST deleted:** zones are now `zoneinfo` (`America/New_York`,
+      `Europe/Amsterdam`, `Europe/Moscow`); no hand-rolled Sakamoto math.
+- [x] **Arrangement:** 64x48 (2 wide × 3 tall), `chain_length=6`, `parallel=1`,
+      `hardware_mapping="adafruit-hat"`, `gpio_slowdown=5`.
+- [x] **Rendering:** Pillow draws a logical 64x48 image; `remap_to_ribbon()`
+      folds it onto the physical 192x16 chain (stock mappers can't express this
+      layout, so we remap in Python — also sets up weather/icons later).
+- [x] **Mapping confirmed on hardware** via `panel_probe.py` + `worldclock.py
+      test`: chain runs bottom→middle→top, left→right, all panels upright;
+      `chain = (2 - grid_row) * 2 + grid_col`. (Physical input is the TR panel;
+      logical order is reversed vs. physical, hence the reversal in the map.)
+- [x] **First light verified** (dedicated 5V/300W PSU; all 6 panels, no dead
+      pixels).
+
+Polish (done):
+
+- [x] **Hardware PWM (flicker-free):** `snd_bcm2835` blacklisted + `dtparam=audio=off`.
+      `worldclock.py` auto-detects the module (`FORCE_DISABLE_HW_PULSE` override),
+      so it always starts. CPU governor set to `performance`.
+- [x] **Autostart:** `worldclock.service` (in the build folder) installed +
+      enabled; verified it auto-starts on boot.
+- [x] **Title + 1px border restored** (S3 look), tom-thumb title/labels over 5x7
+      times to fit the 48px height.
+
+Still open:
+
+- [ ] (Optional) `isolcpus=3` in cmdline for a steadier refresh.
+- [ ] Layer in features — weather, brightness schedule, alternate fonts, etc.
+
+Original notes:
 
 - [ ] **Different stack entirely:** not CircuitPython. Use
       [hzeller `rpi-rgb-led-matrix`](https://github.com/hzeller/rpi-rgb-led-matrix)
@@ -68,6 +105,61 @@ Known / cosmetic:
 - [ ] **Hardware reminder:** PSU is currently borrowed — needs ample amperage for
       6 panels before powering on.
 - [ ] Lives in a new `rpi4-adafruit-hat/` (or similar) folder.
+
+## Port 3 — Spectra wall (18 × 64x64, 2× Pi4 + Electrodragon) 🔭 FUTURE
+
+The big wall-screen. The 6-panel HAT build (Port 2) was literally its prototype.
+Long-term home for the world-clock *and* live sensor/metric dashboards. The goal
+is to **merge the world-clock into the display setup already running there**, not
+replace it.
+
+Hardware / stack notes (carry-over context — capture before it's lost):
+- **18 panels, 64x64**, split across **2× Pi4**, each Pi driving **9 panels via
+  Electrodragon** boards as **3 chains × 3** (`parallel=3, chain_length=3`).
+  Reference config already exists: `led-matrix-display/disp-multi-v3-9panel.py`
+  (`rows=64, cols=64, parallel=3, chain_length=3, pixel_mapper_config="Rotate:270"`).
+- **Electrodragon ≠ Adafruit HAT:** use `hardware_mapping="regular"` (not
+  "adafruit-hat"), and 3 parallel chains instead of the HAT's single chain.
+- **Dedicated PSU**; a **stratum-1 NTP server** lives on the wall's network —
+  use it for tight, near-simultaneous frame flips across both Pis (no wired genlock).
+- **Per-Pi remap puzzle** will recur (same kind of `CELL_TO_CHAIN` ordering we
+  solved on the HAT build), though `Rotate:270` + parallel/chain may cover most.
+
+Controller (replaces the removed Radxa NIO):
+- The NIO orchestrated the two display Pis and was repurposed for another project.
+  Needs a replacement SBC. It does **not** drive panels (the 2 Pis do), so no
+  GPIO/HUB75 requirement — it's an orchestrator/content server.
+- **Target board:** a **Pi5 or similar Radxa**, ideally **with an NPU**, because
+  it should also run **accelerated OpenCV for video/image splitting** (slicing
+  source frames into the two per-Pi / 18-panel regions).
+  - Caveat to verify: OpenCV doesn't transparently use most NPUs. Acceleration
+    is usually vendor-specific — **Rockchip RKNN** on Radxa boards, or a **Hailo**
+    module on the Pi5 — with GPU/`cv2.UMat`(OpenCL) as a fallback. Confirm the
+    chosen board's accel path before committing.
+- **Wants:** wired Gigabit Ethernet, decent CPU/RAM (it may also host the metrics
+  pipeline + a config/web UI), stable Linux, good NTP client behavior.
+
+Open question:
+- [ ] **Unified canvas vs. independent regions:** one logical 18-panel image
+      (controller splits into two per-Pi halves) vs. two independent displays.
+      Also: dedicated controller vs. promoting one display Pi to "primary".
+
+Work items (rough order):
+- [ ] Pick + provision the controller SBC (NPU board for accelerated OpenCV).
+- [ ] Decide the unified-vs-independent model (open question above).
+- [ ] Reuse the world-clock core; render to the wall geometry (per-Pi remap).
+- [ ] Stand up the sensor/metrics pipeline (ingest → store → render).
+
+## Sibling hardware (same panels, other roles)
+
+The 6-panel 16×32 setup exists in **two** identical "mini-Spectra" units:
+
+- **Mini-Spectra A** — the unit `rpi4-adafruit-hat/` runs on (this repo's Pi).
+- **Mini-Spectra B** — a second identical unit, currently **not powered**.
+  Future plan: use it as the **output device for a voice-to-text system with
+  automatic translation** (a separate project). I.e. B becomes a live
+  caption/translation display rather than a clock — likely the same hzeller +
+  Pillow rendering stack, fed text from that project instead of `zoneinfo`.
 
 ## DST accuracy note (CircuitPython boards)
 
@@ -90,10 +182,14 @@ hour-exact, but the Pi sidesteps this entirely via `zoneinfo`.
       is a single pixel at this size). A preview tool exists at
       `matrixportal-m4/fonts/_preview.py` — renders any BDF as LED dots at the real
       32px width for side-by-side comparison.
+- [ ] **Sensor/metric dashboards (Spectra, longer-term):** display live metric
+      data from sensor devices — ingest + aggregate (likely on the controller),
+      then render tiles/graphs to the wall alongside or instead of the clock.
 
 ## Suggested order
 
 1. Extract `worldclock_core` from the S3 `code.py`.
 2. ~~M4 port~~ ✅ done (used the `Network` + `get_local_time("Etc/UTC")` approach + 32x32 layout).
-3. RPi4 port (new frontend on the same zone definitions; `zoneinfo` replaces DST helpers).
-4. Layer in features, starting on the Pi.
+3. ~~RPi4 port~~ ✅ done (`rpi4-adafruit-hat/`; `zoneinfo` + Pillow + Python remap).
+4. Layer in features, starting on the Pi (weather, brightness, fonts).
+5. Spectra wall: pick the NPU controller, merge the world-clock in, then sensor metrics.

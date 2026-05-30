@@ -1,8 +1,10 @@
 # World Clock (RGB LED Matrix)
 
-A multi-timezone "world clock" for Adafruit MatrixPortal boards driving HUB75 RGB
-LED matrix panels. It shows three time zones at a glance, each with a colored
-label and 24-hour time, framed by a thin border.
+A multi-timezone "world clock" for Adafruit MatrixPortal boards and a Raspberry
+Pi driving HUB75 RGB LED matrix panels. It shows three time zones at a glance,
+each with a colored label and 24-hour time, framed by a thin border.
+
+![World Clock on the Raspberry Pi 4 + Adafruit HAT six-panel 64×48 build](docs/rpi4-adafruit-hat-hero.jpg)
 
 ```
 +----------------+

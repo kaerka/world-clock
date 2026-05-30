@@ -1,0 +1,16 @@
+[Unit]
+Description=World Clock on RGB LED matrix (Pi4 + Adafruit HAT)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/kaerka/world-clock/rpi4-adafruit-hat
+ExecStart=/usr/bin/python3 /home/kaerka/world-clock/rpi4-adafruit-hat/worldclock.py
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

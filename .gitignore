@@ -5,6 +5,13 @@ settings.toml
 !secrets.py.template
 !settings.toml.template
 
+# --- Local runtime config (Pi/Spectra; may hold keys, locations, host info) ---
+# Forward-looking: for the planned on-device config / web UI. Keep *.template tracked.
+*.local.toml
+*.local.json
+config.local.*
+!*.local.*.template
+
 # --- CircuitPython board-generated files ---
 boot_out.txt          # contains the board's MAC address and UID
 *.uf2
@@ -15,6 +22,10 @@ lib/
 # --- Python / editor / OS cruft ---
 __pycache__/
 *.py[cod]
+
+# --- Pillow bitmap-font build artifacts (generated from .bdf at runtime) ---
+*.pil
+*.pbm
 .DS_Store
 Thumbs.db
 .vscode/
