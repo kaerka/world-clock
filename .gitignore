@@ -19,6 +19,9 @@ boot_out.txt          # contains the board's MAC address and UID
 # --- CircuitPython libraries (download from the Adafruit bundle, see README) ---
 lib/
 
+# --- Agent handoff notes (local only; manually carried between systems) ---
+PROJECT_CONTEXT.md
+
 # --- Python / editor / OS cruft ---
 __pycache__/
 *.py[cod]
