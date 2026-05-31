@@ -14,6 +14,7 @@ Saint Petersburg/Moscow).
 | `64x64-matrixportal-s3/` | MatrixPortal S3, 64×64 | CircuitPython (`displayio`) | working |
 | `32x32-matrixportal-m4/` | MatrixPortal M4, 32×32 | CircuitPython (`displayio`) | working |
 | `rpi4-adafruit-hat/` | **Pi 4 + Adafruit HAT, 6×16×32** | Python + hzeller lib + Pillow | **working, deployed** |
+| `mqtt-display/` | same Pi/matrix | reuses the Pi build + `paho-mqtt` | **optional add-on** (see below) |
 | _(future)_ Spectra wall | 2× Pi4 + Electrodragon, 18×64×64 | Python + hzeller lib | planned — see below |
 
 The two CircuitPython builds run on-device (CIRCUITPY drive) and hand-roll DST
@@ -33,8 +34,11 @@ from prototyping to the mini build, so it's written down for the next move.)
 
 ## Pi build (`rpi4-adafruit-hat/`) — the important one
 
-This is the build you'll usually be asked to work on. It runs on the Pi this
-repo is checked out on (`matrixpi-mini-1`).
+This is the build you'll usually be asked to work on. It runs on the Pis this
+repo is checked out on (`matrixpi-mini-1`, `matrixpi-mini-2`). For a fresh Pi,
+the full, verified bring-up (apt deps, building the `rgbmatrix` bindings, sound
+blacklist, governor, optional HAT RTC) is in
+[`rpi4-adafruit-hat/SETUP.md`](rpi4-adafruit-hat/SETUP.md).
 
 ### Architecture
 - `worldclock.py` renders a logical **64×48** image with **Pillow**, then
@@ -85,6 +89,26 @@ The systemd unit lives in the repo (`worldclock.service`) and is installed to
     s=wc.load_bdf('tom-thumb.bdf'); b=wc.load_bdf('5x7.bdf'); \
     wc.render_clock(s,b,datetime(2026,1,1,tzinfo=wc.UTC)).resize((640,480)).save('/tmp/p.png')"
   ```
+
+## Optional add-on: MQTT display (`mqtt-display/`)
+
+**Not part of the clock** — a separate app kept in this repo only to reuse the Pi
+build's rendering. `display.py` imports `worldclock` (geometry, `build_matrix`,
+`remap_to_ribbon`, `render_clock`, `load_bdf`) and runs one loop: shows MQTT
+messages (plain text or JSON `{text,ttl,color}`, word-wrapped, vertical-scrolled)
+and **falls back to the clock when idle** (`idle_seconds`, default 30). The
+dependency is one-way (this imports the clock, never the reverse), so the clock
+is unaffected if you ignore this folder.
+
+- Because there's **one GPIO owner**, this app *supersedes* `worldclock.service`
+  (the clock becomes its idle screen). Deploy = disable `worldclock`, enable
+  `mqtt-display.service`; revert = the opposite. Don't run both.
+- Config is `config.local.json` (gitignored; copy `config.example.json`). Broker
+  creds live there, never in git.
+- Extra dep only for this app: `sudo apt-get install -y python3-paho-mqtt`
+  (Debian ships 1.6.x → the **v1** paho callback API).
+- This is the piece slated to move to the **Spectra wall** next (more panels,
+  local NTP, no RTC); see `ROADMAP.md`.
 
 ## Gotchas (these bit us — avoid them)
 - **`pkill -f` self-match:** `pkill -f worldclock.py` also matches the shell

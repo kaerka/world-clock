@@ -154,12 +154,30 @@ Work items (rough order):
 
 The 6-panel 16×32 setup exists in **two** identical "mini-Spectra" units:
 
-- **Mini-Spectra A** — the unit `rpi4-adafruit-hat/` runs on (this repo's Pi).
-- **Mini-Spectra B** — a second identical unit, currently **not powered**.
-  Future plan: use it as the **output device for a voice-to-text system with
-  automatic translation** (a separate project). I.e. B becomes a live
-  caption/translation display rather than a clock — likely the same hzeller +
-  Pillow rendering stack, fed text from that project instead of `zoneinfo`.
+- **Mini-Spectra A** (`matrixpi-mini-1`) — runs the clock (`rpi4-adafruit-hat/`).
+- **Mini-Spectra B** (`matrixpi-mini-2`) — a second identical unit (full
+  bring-up done per `SETUP.md`, incl. HAT RTC). Intended as the **output device
+  for a voice-to-text system with automatic translation** (a separate project) —
+  a live caption/translation display fed text instead of `zoneinfo`.
+
+### MQTT display — built ✅ (`mqtt-display/`)
+
+The receiver/display side of that plan now exists: a Pillow + hzeller app that
+subscribes to MQTT and shows messages (plain text or JSON `{text,ttl,color}`,
+word-wrapped, vertical-scrolled), **falling back to the clock when idle**. Built
+and tested end-to-end on `matrixpi-mini-2` against a local mosquitto broker
+(clock → message → auto-revert), then that mini was reverted to the plain clock.
+
+**Next: graduate it to the Spectra wall**, not a mini — the mini's 16×32 pixel
+pitch is coarse for running text. Spectra has many more panels (more legible
+text, room for layout) and a **local NTP server** (so time stays correct without
+the HAT RTC the minis use — Spectra has **no RTC**). Carry-over notes:
+- Re-derive the canvas/remap for the wall geometry (the mini's `CELL_TO_CHAIN`
+  is specific to its 2×3 serpentine).
+- Point `config.local.json` at the real broker (Whisper publisher); keep creds
+  out of git (already gitignored).
+- Same one-GPIO-owner rule: on Spectra it would supersede/merge with whatever
+  clock/dashboard process owns the wall.
 
 ## DST accuracy note (CircuitPython boards)
 

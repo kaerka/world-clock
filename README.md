@@ -30,6 +30,19 @@ each with a colored label and 24-hour time, framed by a thin border.
   derived by applying each zone's UTC offset, so only one network call is needed.
 - Blinking colon, centered labels, and a 1px dimmable border.
 
+## Builds in this repository
+
+- **`64x64-matrixportal-s3/`**, **`32x32-matrixportal-m4/`** — the original
+  CircuitPython builds (see the sections below).
+- **`rpi4-adafruit-hat/`** — Raspberry Pi 4 + Adafruit RGB Matrix HAT port driving
+  six 16×32 panels as a 64×48 canvas. See its
+  [README](rpi4-adafruit-hat/README.md) and step-by-step
+  [SETUP.md](rpi4-adafruit-hat/SETUP.md).
+- **`mqtt-display/`** — an **optional add-on, not part of the world clock.** It's a
+  Pi app that displays MQTT messages and falls back to the world clock when idle,
+  and it lives here only so it can reuse the Pi build's rendering code. **If you
+  just want the clock, ignore this folder** — nothing in the clock depends on it.
+
 ## Repository layout
 
 ```

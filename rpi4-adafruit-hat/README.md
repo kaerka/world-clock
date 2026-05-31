@@ -45,9 +45,14 @@ Running on the six-panel 64×48 wall:
 
 ## Software
 
-The hzeller `rpi-rgb-led-matrix` Python bindings are already installed
-system-wide on this Pi (`import rgbmatrix` works). Pillow, `requests`, and
-`zoneinfo` are present in the system Python (3.11).
+> **Setting up a fresh Pi?** Follow [`SETUP.md`](SETUP.md) for the full,
+> verified bring-up (apt packages, building the `rgbmatrix` bindings, sound
+> blacklist, governor, and installing the service). The notes below assume that
+> setup is already done.
+
+The hzeller `rpi-rgb-led-matrix` Python bindings are installed system-wide
+(`import rgbmatrix` works). Pillow and `zoneinfo` are present in the system
+Python (3.11); timezones use the stdlib `zoneinfo` (no `requests` needed).
 
 The matrix driver needs GPIO access, so run with `sudo`:
 

@@ -1,0 +1,14 @@
+{
+  "broker": "192.168.1.10",
+  "port": 1883,
+  "username": null,
+  "password": null,
+  "tls": false,
+  "topics": ["whisper/transcript"],
+  "client_id": "matrix-mqtt-display",
+  "idle_seconds": 30,
+  "text_color": [255, 255, 255],
+  "font": "tom-thumb",
+  "fps": 20,
+  "scroll_px_per_sec": 14
+}
