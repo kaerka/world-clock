@@ -1,4 +1,5 @@
 {
+  "backend": "spectra",
   "broker": "192.168.1.10",
   "port": 1883,
   "username": null,
@@ -9,6 +10,7 @@
   "idle_seconds": 30,
   "text_color": [255, 255, 255],
   "font": "tom-thumb",
+  "text_font_size": 18,
   "fps": 20,
-  "scroll_px_per_sec": 14
+  "scroll_px_per_sec": 18
 }

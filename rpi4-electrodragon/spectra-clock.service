@@ -1,0 +1,19 @@
+[Unit]
+Description=World Clock on Spectra wall (Pi4 + Electrodragon, 9x 64x64)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/kaerka/world-clock/rpi4-electrodragon
+# rgbmatrix is NOT installed system-wide on this box; point at the prebuilt
+# hzeller py3.11 build that already drives this wall (see README / PROJECT_CONTEXT).
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/kaerka/led-matrix-display/rpi-rgb-led-matrix/bindings/python
+ExecStart=/usr/bin/python3 /home/kaerka/world-clock/rpi4-electrodragon/spectra_clock.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,5 @@
 [Unit]
-Description=Matrix MQTT display (Pi4 + Adafruit HAT) — clock idle, MQTT messages on demand
+Description=Matrix MQTT display — clock idle, MQTT messages on demand
 After=network-online.target time-sync.target
 Wants=network-online.target
 
@@ -9,6 +9,11 @@ User=root
 WorkingDirectory=/home/kaerka/world-clock/mqtt-display
 ExecStart=/usr/bin/python3 /home/kaerka/world-clock/mqtt-display/display.py
 Environment=PYTHONUNBUFFERED=1
+# matrixpi-upper (Spectra): rgbmatrix is not installed system-wide; point at the
+# prebuilt hzeller py3.11 build. Harmless on the minis (path simply won't exist).
+Environment=PYTHONPATH=/home/kaerka/led-matrix-display/rpi-rgb-led-matrix/bindings/python
+# One GPIO owner: this app supersedes the clock service. Disable whichever clock
+# service this box runs before enabling this (spectra-clock / worldclock).
 Restart=on-failure
 RestartSec=3
 

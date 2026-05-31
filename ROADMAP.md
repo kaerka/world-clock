@@ -9,7 +9,8 @@ Running notes for porting the clock to more hardware and adding features.
 | MatrixPortal S3 | 64x64 (single panel) | ✅ Working |
 | MatrixPortal M4 | 32x32 (single panel) | ✅ Working (deployed, tom-thumb font) |
 | Raspberry Pi 4 + Adafruit RGB Matrix HAT | 6 × 16x32 panels (64x48, 2w×3t) | ✅ Working — live on hardware (`rpi4-adafruit-hat/`); mapping confirmed via probe |
-| Spectra (full wall) | 18 × 64x64 (2× Pi4, Electrodragon, 3×3 each) | 🔭 Future — merge target for world-clock + sensor metrics |
+| Spectra upper half (`matrixpi-upper`) | 9 × 64x64 (Pi4 + Electrodragon, 3×3, 192×192) | ✅ Working on hardware — clock live (`rpi4-electrodragon/`); orientation confirmed via test pattern. TODO: enable boot service; lower half next |
+| Spectra (full wall) | 18 × 64x64 (2× Pi4, Electrodragon, 3×3 each) | 🔭 Future — merge target for world-clock + sensor metrics; lower half next |
 | ~~Pimoroni Interstate 75~~ | — | ❌ Dropped — original (non-W) board has no onboard WiFi |
 
 ## Highest-leverage first step: extract a shared core
@@ -147,7 +148,10 @@ Open question:
 Work items (rough order):
 - [ ] Pick + provision the controller SBC (NPU board for accelerated OpenCV).
 - [ ] Decide the unified-vs-independent model (open question above).
-- [ ] Reuse the world-clock core; render to the wall geometry (per-Pi remap).
+- [x] Reuse the world-clock core; render to the wall geometry — done for the
+      **upper half** (`rpi4-electrodragon/spectra_clock.py`, 192×192, `regular`
+      mapping, `parallel=3 chain=3 Rotate:270`, no custom remap). Render verified
+      offline; on-wall bring-up + `matrixpi-lower` still to do.
 - [ ] Stand up the sensor/metrics pipeline (ingest → store → render).
 
 ## Sibling hardware (same panels, other roles)

@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """
-Matrix MQTT display — Raspberry Pi 4 + Adafruit RGB Matrix HAT (6x16x32 -> 64x48).
+Matrix MQTT display — clock-idle screen + on-demand MQTT messages.
 
-A single process that owns the LED matrix and shows two things:
+A single process owns the LED matrix and shows two things:
 
-  * IDLE: the world clock (rendering + panel geometry are reused directly from
-    ../rpi4-adafruit-hat/worldclock.py, so the clock looks identical).
+  * IDLE: the world clock (rendering + geometry are reused directly from the
+    chosen clock build, so the clock looks identical to the standalone clock).
   * MESSAGE: text received over MQTT. A new message takes over the panel,
     word-wrapped to fit, scrolling vertically if it overflows. After
     ``idle_seconds`` with no newer message, it auto-reverts to the clock.
 
 Why one process: the matrix holds the GPIO/PWM, so only one program can drive
-it at a time. This app therefore *supersedes* worldclock.service (the clock
+it at a time. This app therefore *supersedes* the clock service (the clock
 lives on as the idle screen here).
+
+Two hardware backends, selected by the ``backend`` config key:
+  * "spectra"      -> ../rpi4-electrodragon/spectra_clock.py  (9x 64x64, 192x192,
+                      Electrodragon, TTF fonts, no remap)        [default]
+  * "adafruit-hat" -> ../rpi4-adafruit-hat/worldclock.py        (6x 16x32, 64x48,
+                      Adafruit HAT, BDF fonts, serpentine remap)
 
 Payloads may be plain UTF-8 text, or JSON:
 
@@ -22,6 +28,9 @@ A bare string, or any payload that isn't a JSON object, is treated as plain
 text using the configured defaults.
 
 Config lives in config.local.json (gitignored) — copy config.example.json.
+
+Run a no-hardware render check (no matrix, no broker, no paho needed):
+    python3 display.py selftest      # writes /tmp/mqtt_*.png
 """
 import json
 import os
@@ -29,25 +38,26 @@ import sys
 import time
 import threading
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from PIL import Image, ImageDraw
-import paho.mqtt.client as mqtt
+from PIL import Image, ImageDraw, ImageFont
 
-# --- Reuse the world-clock rendering + panel geometry ---------------------
-WC_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "rpi4-adafruit-hat")
-)
-sys.path.insert(0, WC_DIR)
-import worldclock as wc  # noqa: E402
+HERE = os.path.dirname(os.path.abspath(__file__))
+HAT_DIR = os.path.normpath(os.path.join(HERE, "..", "rpi4-adafruit-hat"))
+SPECTRA_DIR = os.path.normpath(os.path.join(HERE, "..", "rpi4-electrodragon"))
+DEJAVU = "/usr/share/fonts/truetype/dejavu"
 
-CANVAS_W = wc.CANVAS_W
-CANVAS_H = wc.CANVAS_H
-BORDER_COLOR = wc.BORDER_COLOR
-UTC = wc.UTC
+UTC = ZoneInfo("UTC")
+CONFIG_PATH = os.path.join(HERE, "config.local.json")
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.local.json")
+# Canvas geometry + border are filled in from the selected backend at startup;
+# the render helpers below read these module globals.
+CANVAS_W = None
+CANVAS_H = None
+BORDER_COLOR = (0x20, 0x20, 0x20)
 
 DEFAULTS = {
+    "backend": "spectra",       # "spectra" (this wall) or "adafruit-hat" (the minis)
     "broker": "localhost",
     "port": 1883,
     "username": None,
@@ -55,12 +65,75 @@ DEFAULTS = {
     "tls": False,
     "topics": ["whisper/transcript"],
     "client_id": "matrix-mqtt-display",
-    "idle_seconds": 30,        # message lingers this long after the last one, then -> clock
+    "idle_seconds": 30,         # message lingers this long after the last one, then -> clock
     "text_color": [255, 255, 255],
-    "font": "tom-thumb",       # "tom-thumb" (dense) or "5x7" (more legible)
-    "fps": 20,                 # render loop rate (smooth scroll)
-    "scroll_px_per_sec": 14,   # vertical scroll speed for overflowing text
+    "font": "tom-thumb",        # adafruit-hat only: "tom-thumb" (dense) or "5x7"
+    "text_font_size": 18,       # spectra only: DejaVuSans-Bold px size for messages
+    "fps": 20,                  # render loop rate (smooth scroll)
+    "scroll_px_per_sec": 18,    # vertical scroll speed for overflowing text
 }
+
+
+# --- Hardware backends ----------------------------------------------------
+class SpectraBackend:
+    """Spectra wall: Pi4 + Electrodragon, 9x 64x64 -> 192x192, TTF fonts, no remap."""
+    name = "spectra"
+    border = (0x20, 0x20, 0x20)
+
+    def __init__(self):
+        if SPECTRA_DIR not in sys.path:
+            sys.path.insert(0, SPECTRA_DIR)
+        import spectra_clock as sc  # noqa: E402
+        self.sc = sc
+        self.w, self.h = sc.CANVAS_W, sc.CANVAS_H
+
+    def build_matrix(self):
+        return self.sc.build_matrix()
+
+    def message_font(self, cfg):
+        size = int(cfg.get("text_font_size", 18))
+        return ImageFont.truetype(f"{DEJAVU}/DejaVuSans-Bold.ttf", size)
+
+    def render_clock(self, now):
+        return self.sc.render_clock(now)
+
+    def to_canvas(self, frame):
+        return frame                      # clean 3x3 grid; Rotate:270 handles geometry
+
+
+class AdafruitHatBackend:
+    """The minis: Pi4 + Adafruit HAT, 6x 16x32 -> 64x48, BDF fonts, serpentine remap."""
+    name = "adafruit-hat"
+
+    def __init__(self):
+        if HAT_DIR not in sys.path:
+            sys.path.insert(0, HAT_DIR)
+        import worldclock as wc  # noqa: E402
+        self.wc = wc
+        self.w, self.h = wc.CANVAS_W, wc.CANVAS_H
+        self.border = wc.BORDER_COLOR
+        self._small = wc.load_bdf(os.path.join(HAT_DIR, "tom-thumb.bdf"))
+        self._time = wc.load_bdf(os.path.join(HAT_DIR, "5x7.bdf"))
+
+    def build_matrix(self):
+        return self.wc.build_matrix()
+
+    def message_font(self, cfg):
+        return self._small if cfg.get("font") == "tom-thumb" else self._time
+
+    def render_clock(self, now):
+        return self.wc.render_clock(self._small, self._time, now)
+
+    def to_canvas(self, frame):
+        return self.wc.remap_to_ribbon(frame)
+
+
+def get_backend(name):
+    if name in ("adafruit-hat", "hat", "mini"):
+        return AdafruitHatBackend()
+    if name in ("spectra", "electrodragon"):
+        return SpectraBackend()
+    sys.exit("Unknown backend {!r}; use 'spectra' or 'adafruit-hat'.".format(name))
 
 
 def load_config():
@@ -185,7 +258,7 @@ def build_message_image(text, font, color, max_w):
 
 
 def render_message_frame(tall, elapsed, scroll_pps):
-    """Compose one 64x48 frame: bordered, with the message (scrolled if tall)."""
+    """Compose one frame: bordered, with the message (scrolled if it overflows)."""
     img = Image.new("RGB", (CANVAS_W, CANVAS_H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
     draw.rectangle((0, 0, CANVAS_W - 1, CANVAS_H - 1), outline=BORDER_COLOR)
@@ -205,20 +278,31 @@ def render_message_frame(tall, elapsed, scroll_pps):
 
 # --- MQTT -----------------------------------------------------------------
 def make_client(cfg, state):
-    client = mqtt.Client(client_id=cfg["client_id"], clean_session=True)
+    import paho.mqtt.client as mqtt   # lazy: not needed for selftest/rendering
+
+    # paho 2.x requires an explicit callback API version; 1.6.x (Debian apt) uses
+    # the old positional callbacks. Support both.
+    try:
+        client = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION1,
+            client_id=cfg["client_id"], clean_session=True,
+        )
+    except (AttributeError, TypeError):
+        client = mqtt.Client(client_id=cfg["client_id"], clean_session=True)
+
     if cfg.get("username"):
         client.username_pw_set(cfg["username"], cfg.get("password"))
     if cfg.get("tls"):
         client.tls_set()
 
-    def on_connect(c, _u, _flags, rc):
+    def on_connect(c, _u, _flags, rc, *_):
         with state.lock:
             state.connected = (rc == 0)
         for topic in cfg["topics"]:
             c.subscribe(topic)
         print("[mqtt] connected rc={} -> subscribed {}".format(rc, cfg["topics"]), flush=True)
 
-    def on_disconnect(_c, _u, rc):
+    def on_disconnect(_c, _u, rc, *_):
         with state.lock:
             state.connected = False
         print("[mqtt] disconnected rc={}".format(rc), flush=True)
@@ -238,20 +322,43 @@ def make_client(cfg, state):
     return client
 
 
+def _set_geometry(backend):
+    global CANVAS_W, CANVAS_H, BORDER_COLOR
+    CANVAS_W, CANVAS_H, BORDER_COLOR = backend.w, backend.h, backend.border
+
+
+def selftest(cfg):
+    """Render the idle clock + a sample (overflowing) message to PNGs. No HW/paho."""
+    backend = get_backend(cfg["backend"])
+    _set_geometry(backend)
+    font = backend.message_font(cfg)
+    backend.render_clock(datetime.now(UTC)).save("/tmp/mqtt_clock.png")
+    sample = ("MQTT message takes over the wall, word-wrapped and vertically "
+              "scrolled when it overflows, then reverts to the clock.")
+    tall = build_message_image(sample, font, tuple(cfg["text_color"]), CANVAS_W - 2)
+    render_message_frame(tall, 0.0, cfg["scroll_px_per_sec"]).save("/tmp/mqtt_message.png")
+    print("selftest: backend={} canvas={}x{} -> /tmp/mqtt_clock.png, /tmp/mqtt_message.png"
+          .format(backend.name, CANVAS_W, CANVAS_H), flush=True)
+
+
 def main():
     cfg = load_config()
-    matrix = wc.build_matrix()
-    canvas = matrix.CreateFrameCanvas()
 
-    small_font = wc.load_bdf(os.path.join(WC_DIR, "tom-thumb.bdf"))  # clock title/labels
-    time_font = wc.load_bdf(os.path.join(WC_DIR, "5x7.bdf"))         # clock times
-    msg_font = small_font if cfg["font"] == "tom-thumb" else time_font
+    if len(sys.argv) > 1 and sys.argv[1] == "selftest":
+        selftest(cfg)
+        return
+
+    backend = get_backend(cfg["backend"])
+    _set_geometry(backend)
+    matrix = backend.build_matrix()
+    canvas = matrix.CreateFrameCanvas()
+    msg_font = backend.message_font(cfg)
 
     state = MessageState()
     client = make_client(cfg, state)
     client.loop_start()
-    print("[display] idle=clock, message TTL default {}s, font={}".format(
-        cfg["idle_seconds"], cfg["font"]), flush=True)
+    print("[display] backend={} canvas={}x{} idle=clock TTL={}s".format(
+        backend.name, CANVAS_W, CANVAS_H, cfg["idle_seconds"]), flush=True)
 
     frame_dt = 1.0 / float(cfg["fps"])
     scroll_pps = float(cfg["scroll_px_per_sec"])
@@ -268,9 +375,9 @@ def main():
                 cached_ver = version
             frame = render_message_frame(tall, now - arrived, scroll_pps)
         else:
-            frame = wc.render_clock(small_font, time_font, datetime.now(UTC))
+            frame = backend.render_clock(datetime.now(UTC))
 
-        canvas.SetImage(wc.remap_to_ribbon(frame))
+        canvas.SetImage(backend.to_canvas(frame))
         canvas = matrix.SwapOnVSync(canvas)
         time.sleep(frame_dt)
 
